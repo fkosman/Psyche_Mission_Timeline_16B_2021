@@ -1,0 +1,696 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <base href="./">
+    <meta charset="utf-8">
+    <meta name="viewport" content="user-scalable=no">
+    <title>stages</title>
+    <link rel="stylesheet" href="css/stages1-style.css">
+</head>
+
+<body>
+    <div id='card'>
+        <div id='info' class="ml2">The Psyche Asteroid Mission
+        </div>
+        <button class="button" id='beginButton'>Begin Journey</button>
+        <button class="aboutbutton" id='aboutButton'>About</button>
+        <div>
+            <button class="button" id='mainButton' style='visibility: hidden;'>Main Menu</button>
+            <button class="button" id='prevButton' style='visibility: hidden;'>Previous Stage</button>
+            <button class="button" id='nextButton' style='visibility: hidden;'>Next Stage</button>
+        </div>
+
+        <div id='descriptionBox'>
+            <div id='description'></div>
+        </div>
+
+        <div id='aboutDescriptionBox'>
+            <div id='aboutDescription'></div>
+        </div>
+
+    </div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/animejs/3.2.1/anime.min.js"></script>
+    <script type='module'>
+
+        import * as THREE from 'https://unpkg.com/three@0.124.0/build/three.module.js';
+        import { Vector3 } from 'https://unpkg.com/three@0.125.2/src/math/Vector3.js';
+        import { Raycaster } from 'https://unpkg.com/three@0.125.2/src/core/Raycaster.js';
+        import { GLTFLoader } from 'https://unpkg.com/three@0.125.2/examples/jsm/loaders/GLTFLoader.js';
+        import { DRACOLoader } from 'https://unpkg.com/three@0.125.2/examples/jsm/loaders/DRACOLoader.js';
+
+        import TWEEN from 'https://cdnjs.cloudflare.com/ajax/libs/tween.js/18.6.4/tween.esm.min.js';
+
+        var container, controls;
+        var camera, scene, renderer, tween;
+        var intersects, clickX, clickY;
+        var asteroid, satellite, asteroid2, satellite2, mars, orbiter;
+        var targetList = [];
+        var mouse = new THREE.Vector2();
+        var raycaster = new THREE.Raycaster();
+        var targetPosition = new THREE.Vector3();
+        var position = new THREE.Vector3();
+        var beginButton, aboutButton, mainButton, nextButton, prevButton, infoText, moreInfo, canvasCard, description, aboutDescription, descriptionBox, aboutDescriptionBox;
+        var set2Idle = true;
+        const params = {
+            orbitDistance: 5,
+            orbitSpeed: 1,
+            orbitTiltX: 0,
+            orbitTiltY: 0,
+            orbitTiltZ: 0,
+            cameraFOV: 45
+        };
+
+        const ringParams = {
+            ring1Inner: 4.5,
+            ring2Inner: 6.0,
+            ring3Inner: 7.5,
+            ring4Inner: 9.0,
+            ring1Outer: 5.2,
+            ring2Outer: 6.7,
+            ring3Outer: 8.2,
+            ring4Outer: 9.7,
+            orbitSpeed: 1,
+            orbitTiltX: -1,
+            orbitTiltY: 0,
+            orbitTiltZ: 0,
+            ringHighlightColor: 0x3B0158,
+            ringIdleColor: 0x6A6A6A
+        }
+
+        var tween, orbit, orbitContainer;
+        var rotSpeed = 0.0001;
+        var rotSpeed2 = 0.0001;
+
+        var portrait = false;
+
+        init();
+        animate();
+
+        function init() {
+            canvasCard = document.getElementById('card');
+            infoText = document.getElementById('info');
+            beginButton = document.getElementById('beginButton');
+            aboutButton = document.getElementById('aboutButton');
+            mainButton = document.getElementById('mainButton');
+            prevButton = document.getElementById('prevButton');
+            nextButton = document.getElementById('nextButton');
+            description = document.getElementById('description');
+            descriptionBox = document.getElementById('descriptionBox');
+            aboutDescription = document.getElementById('aboutDescription');
+            aboutDescriptionBox = document.getElementById('aboutDescriptionBox');
+            beginButton.addEventListener('click', marsAssist, false);
+            beginButton.addEventListener('touchend', marsAssist, false);
+            aboutButton.addEventListener('click', about, false);
+            aboutButton.addEventListener('touchend', about, false);
+            orbitContainer = new THREE.Object3D();
+
+            container = document.createElement('div');
+            document.body.appendChild(container);
+
+            camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1, 10000);
+            camera.position.set(-297, 0, 22);
+            position.copy(camera.position)
+            camera.lookAt(new THREE.Vector3(-297, 0, 0));
+
+            scene = new THREE.Scene();
+
+            // This creates a soft light so that shadows are less harsh
+            var ambientLight = new THREE.AmbientLight(0xFFFFFF, 0.1);
+            scene.add(ambientLight);
+
+            // Point light is similar to directional light, I'm using realistic setting for light falloff
+            // PointLight( color : Integer, intensity : Float, distance : Number, decay : Float )
+            var pointLight = new THREE.PointLight(0xFFFFFF, 1, 0, 1);
+            pointLight.position.set(4900, 0, 1000);
+            scene.add(pointLight);
+
+            // Build sphere mesh
+            // SphereGeometry(radius : Float, widthSegments : Integer, heightSegments : Integer)
+            var geometry = new THREE.SphereGeometry(20, 30, 30);
+            var material = new THREE.MeshLambertMaterial(
+                {
+                    color: 0xFC9601,
+                    emissive: 0xFC9601,
+                    emissiveIntensity: 1
+                });
+            var mesh = new THREE.Mesh(geometry, material);
+            mesh.position.set(4900, 0, 1000);
+            scene.add(mesh);
+
+            // Build glow effect
+            // Using png sprite blending
+            var spriteMaterial = new THREE.SpriteMaterial(
+                {
+                    map: new THREE.TextureLoader().load('textures/orange glow.png'),
+                    color: 0xFFCC33,
+                    transparent: true,
+                    blending: THREE.AdditiveBlending
+                });
+            var sprite = new THREE.Sprite(spriteMaterial);
+            sprite.scale.set(100, 100, 1.0);
+            mesh.add(sprite); // this centers the glow at the mesh
+
+            var particleGeom = new THREE.Geometry();
+            var particleMaterial = new THREE.PointsMaterial({
+                color: 'rgb(80, 130, 255)',
+                size: 50,
+                map: new THREE.TextureLoader().load('textures/lensflare0.png'),
+                transparent: true,
+                blending: THREE.AdditiveBlending,
+            });
+
+            // adding SkyBox to the scene
+            let materialArray = [];
+            let texture_ft = new THREE.TextureLoader().load('textures/skybox-textures/front.png');
+            let texture_bk = new THREE.TextureLoader().load('textures/skybox-textures/back.png');
+            let texture_up = new THREE.TextureLoader().load('textures/skybox-textures/top.png');
+            let texture_dn = new THREE.TextureLoader().load('textures/skybox-textures/bottom.png');
+            let texture_rt = new THREE.TextureLoader().load('textures/skybox-textures/right.png');
+            let texture_lf = new THREE.TextureLoader().load('textures/skybox-textures/left.png');
+
+            materialArray.push(new THREE.MeshBasicMaterial({ map: texture_ft }));
+            materialArray.push(new THREE.MeshBasicMaterial({ map: texture_bk }));
+            materialArray.push(new THREE.MeshBasicMaterial({ map: texture_up }));
+            materialArray.push(new THREE.MeshBasicMaterial({ map: texture_dn }));
+            materialArray.push(new THREE.MeshBasicMaterial({ map: texture_rt }));
+            materialArray.push(new THREE.MeshBasicMaterial({ map: texture_lf }));
+
+            for (let i = 0; i < 6; i++)
+                materialArray[i].side = THREE.BackSide;
+
+            let skyboxGeo = new THREE.BoxGeometry(10000, 10000, 10000);
+            let skybox = new THREE.Mesh(skyboxGeo, materialArray);
+            scene.add(skybox);
+
+            var loader = new GLTFLoader().setPath('models/');
+            var dracoLoader = new DRACOLoader();
+            dracoLoader.setDecoderPath('js/draco/');
+            loader.setDRACOLoader(dracoLoader);
+
+            // Intro & Phase 2
+            loader.load('compressed-spacecraft.glb', function (gltf) {
+                satellite = gltf.scene;
+                satellite.scale.set(0.01, 0.01, 0.01);
+                satellite.position.set(-297, 0, 19);
+                satellite.rotation.x = 3.5;
+                scene.add(satellite);
+            });
+            // ----------------------------------------------------------- //
+
+            // Mars Scene - Phase 1
+            loader.load('mars-compressed.glb', function (gltf) {
+                mars = gltf.scene;
+                mars.scale.set(0.04, 0.04, 0.04);
+                mars.position.set(-205, -3, -50);
+                scene.add(mars);
+            });
+
+            loader.load('compressed-spacecraft.glb', function (gltf) {
+                satellite2 = gltf.scene;
+                satellite2.scale.set(0.01, 0.01, 0.01);
+                satellite2.position.set(-210, 0, 19);
+                satellite2.rotation.x = 3.5;
+                scene.add(satellite2);
+            });
+            // ----------------------------------------------------------- //
+
+            // Arrival Scene - Phase 2
+            loader.load('asteroid-compressed.glb', function (gltf) {
+                asteroid = gltf.scene;
+                asteroid.scale.set(15, 15, 15);
+                asteroid.position.set(-100, -3, -50);
+                scene.add(asteroid);
+            });
+            // ----------------------------------------------------------- //
+
+            // Orbiting Scene - Phase 3
+            loader.load('asteroid-compressed.glb', function (gltf) {
+                asteroid2 = gltf.scene;
+                asteroid2.scale.set(2, 2, 2);
+                asteroid2.position.set(0, 0, 0);
+                scene.add(asteroid2);
+            });
+
+            loader.load('compressed-spacecraft.glb', function (gltf) {
+                orbiter = gltf.scene;
+                orbiter.scale.set(0.005, 0.005, 0.005);
+                scene.add(orbiter);
+
+                // Orbiting on outermost ring
+                orbitAnimation(orbiter, ringParams.ring4Outer, ringParams.orbitTiltX, ringParams.orbitTiltY, ringParams.orbitTiltZ, ringParams.orbitSpeed);
+            });
+
+            // Build orbit paths
+            makeOrbitPath(ringParams.ring1Inner, ringParams.ring1Outer, ringParams.orbitTiltX, ringParams.orbitTiltY, ringParams.orbitTiltZ, ringParams.ringIdleColor);
+            makeOrbitPath(ringParams.ring2Inner, ringParams.ring2Outer, ringParams.orbitTiltX, ringParams.orbitTiltY, ringParams.orbitTiltZ, ringParams.ringIdleColor);
+            makeOrbitPath(ringParams.ring3Inner, ringParams.ring3Outer, ringParams.orbitTiltX, ringParams.orbitTiltY, ringParams.orbitTiltZ, ringParams.ringIdleColor);
+            makeOrbitPath(ringParams.ring4Inner, ringParams.ring4Outer, ringParams.orbitTiltX, ringParams.orbitTiltY, ringParams.orbitTiltZ, ringParams.ringIdleColor);
+
+            // Setting outermost ring to highlight color
+            targetList[targetList.length-1].material.color.set(ringParams.ringHighlightColor);
+
+            // Listen for mouse clicks on orbit rings
+            window.addEventListener('click', onDocumentMouseDown, false);
+            // ----------------------------------------------------------- //
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.toneMapping = THREE.ACESFilmicToneMapping;
+            renderer.toneMappingExposure = 1;
+            renderer.outputEncoding = THREE.sRGBEncoding;
+            container.appendChild(renderer.domElement);
+
+            // Checking initial load orientation
+            window.addEventListener('load', function() {onWindowResize(window.orientation)}, false);
+
+            // Resizing window on demand and sending orientation
+            window.addEventListener('resize', function() {onWindowResize(window.orientation)}, false);
+
+            var pmremGenerator = new THREE.PMREMGenerator(renderer);
+            pmremGenerator.compileEquirectangularShader();
+
+            textAnimate();
+        }
+
+        function makeOrbitPath(innerRadius, outerRadius, xTilt, yTilt, zTilt, inputColor) {
+            const ringGeometry = new THREE.RingGeometry(innerRadius, outerRadius, 64);
+            const ringMaterial = new THREE.MeshBasicMaterial(
+                { 
+                    color: inputColor, 
+                    side: THREE.DoubleSide 
+                });
+            const ring = new THREE.Mesh(ringGeometry, ringMaterial);
+            ring.position.set(0, 0, 0);
+            ring.rotation.x = xTilt;
+            ring.rotation.y = yTilt;
+            ring.rotation.z = zTilt;
+            scene.add(ring);
+
+            targetList.push(ring);
+        }
+
+        function onDocumentMouseDown(event) 
+        {
+            event.preventDefault();
+            console.log("Click.");
+            
+            if(portrait == false)
+            {
+                // update the mouse variable
+                mouse.x = ( event.clientX / window.innerWidth ) * 2 - 1;
+                mouse.y = - ( event.clientY / window.innerHeight ) * 2 + 1;
+            }
+            else
+            {
+                // update the mouse variable
+                clickX = ( event.clientX / window.innerWidth ) * 2 - 1;
+                clickY = - ( event.clientY / window.innerHeight ) * 2 + 1;
+                mouse.x = -clickY;
+                mouse.y = clickX;
+            }
+
+            
+            // find intersections
+
+            // create a Ray with origin at the mouse position
+            // and direction into the scene (camera direction)
+            raycaster.setFromCamera(mouse, camera);
+		    intersects = raycaster.intersectObjects(targetList);
+            
+            // if there is one (or more) intersections
+            if (intersects.length > 0)
+            {
+                // Simple output log
+                console.log("Hit @ " + intersects[0].object.id);
+
+                // Each ring has an ID based upon when it was added to the scene
+                switch(intersects[0].object.id)
+                {
+                    case 14:
+                        orbitAnimation(orbiter, (ringParams.ring1Outer + ringParams.ring1Inner) / 2, ringParams.orbitTiltX, ringParams.orbitTiltY, ringParams.orbitTiltZ, ringParams.orbitSpeed);
+                        description.innerHTML = "In the final 100 days, the spacecraft will use a gamma ray and neutron spectrometer to learn what elements make up Psyche.";
+                        break;
+
+                    case 15:
+                        orbitAnimation(orbiter, (ringParams.ring2Outer + ringParams.ring2Inner) / 2, ringParams.orbitTiltX, ringParams.orbitTiltY, ringParams.orbitTiltZ, ringParams.orbitSpeed);
+                        description.innerHTML = "During this 100 day orbit, the Psyche Spacecraft will measure Psyche's gravity field to high precision.";
+                        break;
+
+                    case 16:
+                        orbitAnimation(orbiter, (ringParams.ring3Outer + ringParams.ring3Inner) / 2, ringParams.orbitTiltX, ringParams.orbitTiltY, ringParams.orbitTiltZ, ringParams.orbitSpeed);
+                        description.innerHTML = "The best lighting happens in this 80 day orbit, and the spacecraft is able to map the surface of Psyche.";
+                        break;
+
+                    case 17:
+                        orbitAnimation(orbiter, (ringParams.ring4Outer + ringParams.ring4Inner) / 2, ringParams.orbitTiltX, ringParams.orbitTiltY, ringParams.orbitTiltZ, ringParams.orbitSpeed);
+                        description.innerHTML = "The Psyche Spacecraft will spend 56 days in this orbit to get a reliable model of the gravity field for planning the next orbits.";
+                        break;
+
+                    default:
+                        break;
+                }
+
+                // Change intersected ring color
+                intersects[0].object.material.color.set(ringParams.ringHighlightColor); 
+                intersects[0].object.geometry.colorsNeedUpdate = true;
+
+                // Reset all other rings' colors
+                for(var i = 0; i < targetList.length; i++)
+                {
+                    if(intersects[0].object != targetList[i])
+                    {
+                        targetList[i].material.color.set(ringParams.ringIdleColor); 
+                        targetList[i].geometry.colorsNeedUpdate = true;
+                    }
+                }
+            }
+        }
+
+        function toString(v) { return "[ " + v.x + ", " + v.y + ", " + v.z + " ]"; }
+
+        function about() {
+        canvasCard.style.display = "none";
+
+        targetPosition.x = -350;
+        targetPosition.y = 0;
+        targetPosition.z = 22;
+
+        tween = new TWEEN.Tween(position)
+            .to(targetPosition, 2500)
+            .easing(TWEEN.Easing.Sinusoidal.InOut)
+            .onUpdate(function () {
+                camera.position.copy(position);
+            })
+            .onComplete(function () {
+                infoText.innerHTML = "About / Disclaimer";
+                textAnimate();
+                beginButton.style.visibility = "hidden";
+                aboutButton.style.visibility = "hidden";
+                mainButton.style.visibility = "visible";
+                prevButton.style.visibility = "hidden";
+                nextButton.style.visibility = "hidden";
+                aboutDescription.innerHTML = "This work was created in partial fulfillment of Arizona State University Capstone Course " +
+                "“CSE423/CSE424/CSE485/CSE486″. The work is a result of the Psyche Student Collaborations component of NASA’s Psyche Mission (https://psyche.asu.edu)." +
+                "“Psyche: A Journey to a Metal World” [Contract number NNM16AA09C] is part of the NASA Discovery Program mission to solar system targets." +
+                "Trade names and trademarks of ASU and NASA are used in this work for identification only." +
+                "Their usage does not constitute an official endorsement, either expressed or implied, by Arizona State University or National Aeronautics and Space Administration." +
+                "The content is solely the responsibility of the authors and does not necessarily represent the official views of ASU or NASA.";
+                canvasCard.style.display = "block";
+                aboutButton.removeEventListener('click', about, false);
+                mainButton.addEventListener('click', mainMenu, false);
+                descriptionBox.style.visibility = "hidden";
+                aboutDescriptionBox.style.visibility = "visible";
+                aboutButton.removeEventListener('touchend', about, false);
+                mainButton.addEventListener('touchend', mainMenu, false);
+            })
+            .start();
+        }
+
+        function mainMenu() {
+        canvasCard.style.display = "none";
+
+        targetPosition.x = -297;
+        targetPosition.y = 0;
+        targetPosition.z = 22;
+
+        tween = new TWEEN.Tween(position)
+            .to(targetPosition, 2500)
+            .easing(TWEEN.Easing.Sinusoidal.InOut)
+            .onUpdate(function () {
+                camera.position.copy(position);
+            })
+            .onComplete(function () {
+                infoText.innerHTML = "The Psyche Asteroid Mission";
+                textAnimate();
+                beginButton.style.visibility = "visible";
+                aboutButton.style.visibility = "visible";
+                mainButton.style.visibility = "hidden";
+                prevButton.style.visibility = "hidden";
+                nextButton.style.visibility = "hidden";
+                canvasCard.style.display = "block";
+                mainButton.removeEventListener('click', mainMenu, false);
+                aboutButton.addEventListener('click', about, false);
+                descriptionBox.style.visibility = "hidden";
+                aboutDescriptionBox.style.visibility = "hidden";
+                mainButton.removeEventListener('touchend', mainMenu, false);
+                aboutButton.addEventListener('touchend', about, false);
+            })
+            .start();
+        }
+
+        function marsAssist() {
+
+            canvasCard.style.display = "none";
+            if (set2Idle) {
+                satellite2.position.set(-200, -1, 15);
+                set2Idle = false;
+            }
+            else {
+                satellite.position.set(-200, -1, 15);
+                set2Idle = true;
+            }
+
+            targetPosition.x = -197;
+            targetPosition.y = 0;
+            targetPosition.z = 22;
+
+            tween = new TWEEN.Tween(position)
+                .to(targetPosition, 2500)
+                .easing(TWEEN.Easing.Sinusoidal.InOut)
+                .onUpdate(function () {
+                    camera.position.copy(position);
+                })
+                .onComplete(function () {
+                    infoText.innerHTML = "Phase #1 - Mars Gravity Assist";
+                    textAnimate();
+                    beginButton.style.visibility = "hidden";
+                    aboutButton.style.visibility = "hidden";
+                    mainButton.style.visibility = "hidden";
+                    prevButton.style.visibility = "hidden";
+                    nextButton.style.visibility = "visible";
+                    description.innerHTML = "After launching in August 2022, the spacecraft " +
+                        "flies by Mars and undergoes a gravitational slingshot";
+                    canvasCard.style.display = "block";
+                    prevButton.removeEventListener('click', marsAssist, false);
+                    nextButton.addEventListener('click', arrivalPhase, false);
+                    descriptionBox.style.visibility = "visible";
+                    prevButton.removeEventListener('touchend', marsAssist, false);
+                    nextButton.addEventListener('touchend', arrivalPhase, false);
+                })
+                .start();
+
+        }
+
+        function arrivalPhase() {
+
+            canvasCard.style.display = "none";
+
+            if (set2Idle) {
+                satellite2.position.set(-100, -1, 15);
+                asteroid2.position.set(-100, -5, -50);
+                set2Idle = false;
+            }
+            else {
+                satellite.position.set(-100, -1, 15);
+                asteroid.position.set(-100, -5, -50);
+                set2Idle = true;
+            }
+
+            targetPosition.x = -97;
+            targetPosition.y = 0;
+            targetPosition.z = 22;
+
+            tween = new TWEEN.Tween(position)
+                .to(targetPosition, 2500)
+                .easing(TWEEN.Easing.Sinusoidal.InOut)
+                .onUpdate(function () {
+                    camera.position.copy(position);
+                })
+                .onComplete(function () {
+                    infoText.innerHTML = "Phase #2 - Arrival at Psyche"
+                    textAnimate();
+                    beginButton.style.visibility = "hidden";
+                    aboutButton.style.visibility = "hidden";
+                    mainButton.style.visibility = "hidden";
+                    prevButton.style.visibility = "visible";
+                    nextButton.style.visibility = "visible";
+                    description.innerHTML = "After spending around 100 days in the approach phase, " +
+                        "the spacecraft begins to orbit the Psyche asteroid in January 2026";
+                    canvasCard.style.display = "block";
+
+                    prevButton.removeEventListener('click', arrivalPhase, false);
+                    nextButton.removeEventListener('click', arrivalPhase, false);
+
+                    prevButton.removeEventListener('touchend', arrivalPhase, false);
+                    nextButton.removeEventListener('touchend', arrivalPhase, false);
+
+                    prevButton.addEventListener('click', marsAssist, false);
+                    nextButton.addEventListener('click', orbitalPhase, false);
+
+                    prevButton.addEventListener('touchend', marsAssist, false);
+                    nextButton.addEventListener('touchend', orbitalPhase, false);
+                })
+                .start();
+        }
+
+        function orbitalPhase() {
+
+            canvasCard.style.display = "none";
+
+            targetPosition.x = 5;
+            targetPosition.y = 0;
+            targetPosition.z = 22;
+
+            tween = new TWEEN.Tween(position)
+                .to(targetPosition, 2500)
+                .easing(TWEEN.Easing.Sinusoidal.InOut)
+                .onUpdate(function () {
+                    camera.position.copy(position);
+                })
+                .onComplete(function () {
+                    infoText.innerHTML = "Phase #3 - Orbiting Psyche"
+                    textAnimate();
+                    prevButton.addEventListener('click', arrivalPhase, false);
+                    nextButton.removeEventListener('click', orbitalPhase, false);
+                    prevButton.style.visibility = "visible";
+                    nextButton.style.visibility = "hidden";
+
+                    prevButton.addEventListener('touchend', arrivalPhase, false);
+                    nextButton.removeEventListener('touchend', orbitalPhase, false);
+
+                    description.innerHTML = "The spacecraft will orbit Psyche until October 2027 (21 months!)," +
+                        " where it will take measurements and send data back to Earth";
+                    canvasCard.style.display = "block";
+                })
+                .start();
+        }
+
+
+        function textAnimate() { // Wrap every letter in a span
+            var textWrapper = document.querySelector('.ml2');
+            textWrapper.innerHTML = textWrapper.textContent.replace(/\S/g, "<span class='letter'>$&</span>");
+
+            anime.timeline({ loop: false })
+                .add({
+                    targets: '.ml2 .letter',
+                    scale: [4, 1],
+                    opacity: [0, 1],
+                    translateZ: 0,
+                    easing: "easeOutQuad",
+                    duration: 950,
+                    delay: (el, i) => 70 * i
+                });
+        }
+
+        function orbitAnimation(objectToMod, distance, xTilt, yTilt, zTilt, speed) {
+            orbitContainer.rotation.x = xTilt;
+            orbitContainer.rotation.y = yTilt;
+            orbitContainer.rotation.z = zTilt;
+
+            orbit = new THREE.Object3D();
+
+            var planet = objectToMod;
+            planet.position.set(distance, 0, 0.0);
+            orbit.add(planet);
+
+            tween = new TWEEN.Tween(orbit.rotation).to({ z: '+' + (Math.PI * 2) }, 10000 / speed);
+
+            tween.start();
+            tween.repeat(Infinity);
+
+            orbitContainer.add(orbit);
+            scene.add(orbitContainer);
+            return orbitContainer;
+        }
+
+        function onWindowResize(orientation) 
+        {
+            // Checks the browser that is being used
+            if(/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent))
+            {
+                console.log("Assuming mobile.");
+
+                switch(orientation) 
+                {  
+                case -90: case 90:
+                    console.log("Landscape mode.");
+
+                    camera.aspect = window.innerWidth / window.innerHeight;
+                    camera.updateProjectionMatrix();
+
+                    // update the size of the renderer AND the canvas
+                    renderer.setSize(window.innerWidth, window.innerHeight);
+
+                    // set the pixel ratio (for mobile devices)
+                    renderer.setPixelRatio(window.devicePixelRatio);
+
+                    portrait = false;
+                    break; 
+                default:
+                    console.log("Portrait mode.");
+
+                    camera.aspect = window.innerHeight / window.innerWidth;
+                    camera.updateProjectionMatrix();
+
+                    // update the size of the renderer AND the canvas
+                    renderer.setSize(window.innerHeight, window.innerWidth);
+
+                    // set the pixel ratio (for mobile devices)
+                    renderer.setPixelRatio(window.devicePixelRatio);
+
+                    portrait = true;
+                    break;
+                }
+            }
+            else
+            {
+                console.log("Assuming desktop.");
+
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+
+                renderer.setSize(window.innerWidth, window.innerHeight);
+
+                portrait = false;
+            }
+        }
+
+        function animate(time) {
+            TWEEN.update(time);
+            requestAnimationFrame(animate);
+
+            if (asteroid !== undefined) {
+
+                asteroid.rotation.z += rotSpeed;
+                asteroid.rotation.y += rotSpeed;
+            }
+            if (asteroid2 !== undefined) {
+                asteroid2.rotation.z += rotSpeed;
+                asteroid2.rotation.y += rotSpeed;
+            }
+
+            if (satellite !== undefined) {
+                satellite.rotation.x += rotSpeed2;
+                satellite.rotation.z += rotSpeed2;
+            }
+
+            if (satellite2 !== undefined) {
+                satellite2.rotation.x += rotSpeed2;
+                satellite2.rotation.z += rotSpeed2;
+            }
+
+            if (orbiter !== undefined) {
+
+                orbiter.rotation.x -= rotSpeed2;
+                orbiter.rotation.z += rotSpeed2;
+            }
+
+            renderer.render(scene, camera);
+        }
+
+    </script>
+</body>
+
+</html>
